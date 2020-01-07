@@ -16,13 +16,16 @@ class DataReader:
                 if len(splited_words) > 1:
                     word = splited_words[1]
                     word_idx = self.word_dict[word]
-                    cur_sentence[0].append(word_idx)
+                    cur_sentence[0].append(word)
                     pos = splited_words[2]
                     pos_index = self.pos_dict[pos]
-                    cur_sentence[1].append(pos_index)
+                    cur_sentence[1].append(pos)
                     edge = (int (splited_words[3]),int(splited_words[0]))
                     cur_sentence[2].append(edge)
                 else:
+                    if len (cur_sentence[0])>100:
+                        print (len (cur_sentence[0]))
+                        print (cur_sentence[0])
                     self.sentences.append(cur_sentence)
                     cur_sentence = [[],[],[]]
 
