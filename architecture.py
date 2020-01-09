@@ -109,7 +109,8 @@ def nll_loss(true_tree, scores_tensor, edges_map):
         for j in range(n_edges):
             if j != true_m:
                 denominator += scores_tensor[edges_map[(j, true_m)]]
-        loss += torch.log(scores_tensor[edges_map[(true_h, true_m)]] / denominator)
+        tmp_idx = edges_map[(true_h, true_m)]
+        loss += torch.log(scores_tensor[tmp_idx] / denominator)
     return -(1/n_edges) * loss
 
 

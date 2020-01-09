@@ -14,7 +14,7 @@ def test_read_data():
 
 def test_partial_dataset():
     word_vocab, pos_vocab = PreProcessUtils.get_vocabs("train.labeled")
-    dataset  = DependencyDataset(word_vocab, pos_vocab, "train.labeled", 'train', padding=True, word_embeddings=None)
+    dataset = DependencyDataset(word_vocab, pos_vocab, "train.labeled", 'train', padding=False, word_embeddings=None)
     for words,pos,len,edges in dataset:
         print (words)
 
