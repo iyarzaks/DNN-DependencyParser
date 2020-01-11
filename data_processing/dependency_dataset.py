@@ -6,15 +6,7 @@ from pathlib import Path
 from collections import Counter
 from data_processing.data_reader import DataReader
 import numpy as np
-# These are not relevant for our POS tagger but might be usefull for HW2
-UNKNOWN_TOKEN = "<unk>"
-PAD_TOKEN = "<pad>"  # Optional: this is used to pad a batch of sentences in different lengths.
-# ROOT_TOKEN = PAD_TOKEN # this can be used if you are not padding your batches
-ROOT_TOKEN = "<root>" # use this if you are padding your batches and want a special token for ROOT
-SPECIAL_TOKENS = [PAD_TOKEN, UNKNOWN_TOKEN, ROOT_TOKEN]
-
-
-
+ROOT_TOKEN = "<root>"
 
 class DependencyDataset (Dataset):
     def __init__(self, word_dict, pos_dict, file_path: str, subset: str, padding=False, word_embeddings=None):
@@ -25,9 +17,8 @@ class DependencyDataset (Dataset):
         self.data_reader.read_data()
         self.word_idx_counter = self.data_reader.word_idx_counter
         self.vocab_size = len(self.data_reader.word_dict)
-        self.update_word_dict(word_dict)
-        self.pos_dict = self.update_pos_dict(pos_dict)
-        self.word_dict = self.update_word_dict(word_dict)
+        self.pos_dict = pos_dict
+        self.word_dict = word_dict
         if word_embeddings:
             self.word_idx_mappings, self.idx_word_mappings, self.word_vectors = word_embeddings
         else:
@@ -57,11 +48,6 @@ class DependencyDataset (Dataset):
     def get_word_idx_counter(self):
         return self.word_idx_counter
 
-    def update_word_dict(self,word_dict):
-        max_value = max(word_dict.values())
-        for i, special_tag in enumerate(SPECIAL_TOKENS):
-            word_dict[special_tag] = i+max_value
-        return word_dict
 
 
 
@@ -79,12 +65,6 @@ class DependencyDataset (Dataset):
         # print("idx_pos_mappings -", idx_pos_mappings)
         # print("pos_idx_mappings -", pos_idx_mappings)
         # return pos_idx_mappings, idx_pos_mappings
-
-    def update_pos_dict(self,pos_dict):
-        max_value = max(pos_dict.values())
-        for i, special_tag in enumerate(SPECIAL_TOKENS):
-            pos_dict[special_tag] = i+max_value+1
-        return pos_dict
 
     # def get_pos_vocab(self):
     #     return self.pos_idx_mappings, self.idx_pos_mappings

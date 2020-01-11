@@ -10,6 +10,8 @@ class DependencyParser(nn.Module):
                  mlp_hid_dim, loss_f='NLL', ex_w_emb=None):
         super(DependencyParser, self).__init__()
 
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         self.w_indx_counter = w_indx_counter
         self.w2i = w2i
         self.ex_emb_flag = False
@@ -61,8 +63,8 @@ class DependencyParser(nn.Module):
                     word_idx_tensor[cell_indx] = self.w2i['<unk>']
 
         # Word & POS embedding
-        word_emb_tensor = self.word_embedding(word_indx_tensor)
-        pos_emb_tensor = self.pos_embedding(pos_indx_tensor)
+        word_emb_tensor = self.word_embedding(word_indx_tensor.to(self.device))
+        pos_emb_tensor = self.pos_embedding(pos_indx_tensor.to(self.device))
         # Embeddings concatenation
         if self.ex_emb_flag:  # todo: test
             ex_word_em_tensor = self.ex_word_embedding(word_indx_tensor)
