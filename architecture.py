@@ -150,7 +150,7 @@ def loss_aug_inf(true_tree, scores_tensor, edges_map):
     # Loss calculation
     loss = torch.max(torch.tensor([0, 1 + torch.sum(true_scores) - torch.sum(pred_scores)], requires_grad=True))
 
-    return loss  # todo: maybe we should multiply the loss by -1
+    return -1*loss  # todo: maybe we should multiply the loss by -1
 
 
 class EdgeScorer(nn.Module):

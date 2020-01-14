@@ -83,10 +83,10 @@ class DependencyDataset (Dataset):
                 pos_idx_list.append(self.pos_dict[pos])
                 edges_list.append(edge)
             sentence_len = len(words_idx_list)
-            if padding:
-                while len(words_idx_list) < self.max_seq_len:
-                    words_idx_list.append(self.word_dict[PAD_TOKEN])
-                    pos_idx_list.append(self.pos_dict[PAD_TOKEN])
+            # if padding:
+            #     while len(words_idx_list) < self.max_seq_len:
+            #         words_idx_list.append(self.word_dict[PAD_TOKEN])
+            #         pos_idx_list.append(self.pos_dict[PAD_TOKEN])
             sentence_word_idx_list.append(torch.tensor(words_idx_list, dtype=torch.long, requires_grad=False))
             sentence_pos_idx_list.append(torch.tensor(pos_idx_list, dtype=torch.long, requires_grad=False))
             sentence_edges_list.append(np.array(edges_list))

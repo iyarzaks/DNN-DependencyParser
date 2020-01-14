@@ -9,18 +9,18 @@ from torch.utils.data.dataloader import DataLoader
 import numpy as np
 import time
 import datetime
+import json
 np.set_printoptions(precision = 3, suppress = True)
-HID_DIM = 20
+
 
 # Todo wrap function for grid search, save results and best model.
-
+HID_DIM_MLP = 100
 LSTM_LAYERS = 2
 TRAIN_FILE = "train.labeled"
 TEST_FILE = "test.labeled"
-EPOCHS = 5
+EPOCHS = 30
 WORD_EMBEDDING_DIM = 100
-POS_EMBEDDING_DIM = 100
-HIDDEN_DIM = 10
+POS_EMBEDDING_DIM = 25
 
 def evaluate(model, test_dataloader):
     acc = 0
@@ -43,6 +43,8 @@ def train(model, optimizer, train_dataloader, test_dataloader, accumulate_grad_s
     print("Training Started")
     accuracy_list = []
     loss_list = []
+    test_loss_list = []
+    test_accuracy_list = []
     epochs = EPOCHS
     for epoch in range(epochs):
         start_time = time.time()
@@ -74,12 +76,13 @@ def train(model, optimizer, train_dataloader, test_dataloader, accumulate_grad_s
             cur_acc = predicted_tree[1:] == edges[1:]
             acc += np.sum(cur_acc)
             sentence_avarage_acc += (np.sum(cur_acc) / len(edges))
-
         loss = loss / len(train_dataloader.dataset)
         acc = acc / np.sum(train_dataloader.dataset.sentence_lens)
         loss_list.append(float(loss))
         accuracy_list.append(float(acc))
         test_acc, test_loss = evaluate(model, test_dataloader)
+        test_loss_list.append(float(test_loss))
+        test_accuracy_list.append(float(test_acc))
         epoch_runtime = datetime.timedelta(seconds=time.time() - start_time)
         print("Epoch {} Completed,\tLoss {}\tAccuracy: {}\t Test Accuracy: {} \t Test Loss: {} \t Time: {}".format(epoch + 1,
                                                                                       loss.cpu().detach().numpy()[0],5,
@@ -87,6 +90,8 @@ def train(model, optimizer, train_dataloader, test_dataloader, accumulate_grad_s
                                                                                       round(test_acc,3),
                                                                                       test_loss.cpu().detach().numpy()[0],5),
                                                                                                                    epoch_runtime)
+        return model, {"loss_list": loss_list,"accuracy_list": accuracy_list,
+                       "test_loss_list": test_loss_list,"test_accuracy_list":test_accuracy_list}
 
 
 def main():
@@ -97,7 +102,7 @@ def main():
     w_vocab_size = len(word_vocab)
     pos_vocab_size = len(pos_vocab)
     model = DependencyParser(w_vocab_size, WORD_EMBEDDING_DIM, w_indx_counter, train_dataset.word_dict, pos_vocab_size,
-                             POS_EMBEDDING_DIM, LSTM_LAYERS, HID_DIM, loss_f='NLL', ex_w_emb=None)
+                             POS_EMBEDDING_DIM, LSTM_LAYERS, HID_DIM_MLP, loss_f='NLL', ex_w_emb=None)
     use_cuda = torch.cuda.is_available()
     if use_cuda:
         print("working on gpu")
@@ -108,7 +113,12 @@ def main():
     accumulate_grad_steps = 50  # This is the actual batch_size, while we officially use batch_size=1
     train_dataloader = DataLoader(train_dataset, shuffle=True)
     test_dataloader = DataLoader(test_dataset, shuffle=False)
-    train(model, optimizer, train_dataloader, test_dataloader, accumulate_grad_steps)
+    trained_model , results_dict = train(model, optimizer, train_dataloader, test_dataloader, accumulate_grad_steps)
+    torch.save(trained_model, "basic_model")
+    for file in results_dict:
+        with open(file, 'w') as f:
+            json.dump(results_dict[file], f)
+
 
 
 if __name__ == '__main__':
