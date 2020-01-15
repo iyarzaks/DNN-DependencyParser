@@ -8,7 +8,6 @@ class PreProcessUtils:
 
     @staticmethod
     def get_vocabs(file_paths):
-        print (file_paths)
         word_dict = {}
         word_idx = 0
         pos_dict = {}

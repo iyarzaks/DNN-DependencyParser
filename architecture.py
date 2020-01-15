@@ -24,7 +24,7 @@ class DependencyParser(nn.Module):
         # Embedding layers initialization
         self.word_embedding = nn.Embedding(w_vocab_size, w_emb_dim)
         self.pos_embedding = nn.Embedding(pos_vocab_size, pos_emb_dim)
-        if ex_w_emb:  # Use external word embeddings
+        if ex_w_emb is not None:  # Use external word embeddings
             self.ex_emb_flag = True
             self.ex_word_embedding = nn.Embedding.from_pretrained(ex_w_emb, freeze=False)
 

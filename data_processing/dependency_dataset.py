@@ -7,6 +7,8 @@ from collections import Counter
 from data_processing.data_reader import DataReader
 import numpy as np
 ROOT_TOKEN = "<root>"
+UNK_TOKEN = "<unk>"
+SPECIAL_TOKENS = [ROOT_TOKEN, UNK_TOKEN]
 
 class DependencyDataset (Dataset):
     def __init__(self, word_dict, pos_dict, file_path: str, subset: str, padding=False, word_embeddings=None):
@@ -20,10 +22,10 @@ class DependencyDataset (Dataset):
         self.pos_dict = pos_dict
         self.word_dict = word_dict
         if word_embeddings:
-            self.word_idx_mappings, self.idx_word_mappings, self.word_vectors = word_embeddings
-        else:
             self.word_idx_mappings, self.idx_word_mappings, self.word_vectors = self.init_word_embeddings(
-                self.data_reader.word_dict)
+                self.data_reader.word_dict, word_embeddings)
+        else:
+            self.word_idx_mappings, self.idx_word_mappings, self.word_vectors = [[],[],[]]
         # self.pos_idx_mappings, self.idx_pos_mappings = self.init_pos_vocab(self.data_reader.pos_dict)
         # self.pad_idx = self.word_idx_mappings.get(PAD_TOKEN)
         # self.unknown_idx = self.word_idx_mappings.get(UNKNOWN_TOKEN)
@@ -40,19 +42,18 @@ class DependencyDataset (Dataset):
         return word_embed_idx, pos_embed_idx, sentence_len , edges
 
     @staticmethod
-    def init_word_embeddings(word_dict):
-        return [0,0,0]
-        glove = Vocab(Counter(word_dict), vectors="glove.6B.300d", specials=SPECIAL_TOKENS)
-        return glove.stoi, glove.itos, glove.vectors
+    def init_word_embeddings(word_dict, embeding_type):
+        if embeding_type == "glove":
+            glove = Vocab(Counter(word_dict), vectors="glove.6B.300d", specials=SPECIAL_TOKENS)
+            return glove.stoi, glove.itos, glove.vectors
+        else:
+            return [[],[],[]]
 
     def get_word_idx_counter(self):
         return self.word_idx_counter
 
-
-
-
-    # def get_word_embeddings(self):
-    #     return self.word_idx_mappings, self.idx_word_mappings, self.word_vectors
+    def get_word_embeddings(self):
+        return self.word_idx_mappings, self.idx_word_mappings, self.word_vectors
 
     # def init_pos_vocab(self, pos_dict):
         # idx_pos_mappings = sorted([self.word_idx_mappings.get(token) for token in SPECIAL_TOKENS])
