@@ -7,12 +7,13 @@ from itertools import permutations
 
 class DependencyParser(nn.Module):
     def __init__(self, w_vocab_size, w_emb_dim, w_indx_counter, w2i, pos_vocab_size, pos_emb_dim, n_lstm_layers,
-                 mlp_hid_dim, loss_f='NLL', ex_w_emb=None):
+                 mlp_hid_dim, lbl_mlp_hid_dim, n_labels, loss_f='NLL', ex_w_emb=None, with_labels=False):
         super(DependencyParser, self).__init__()
 
         self.w_indx_counter = w_indx_counter
         self.w2i = w2i
         self.ex_emb_flag = False
+        self.labels_flag = with_labels
 
         # LSTM dimensions
         self.n_lstm_layers = n_lstm_layers
@@ -34,22 +35,35 @@ class DependencyParser(nn.Module):
                                batch_first=True)
 
         # Edge scorer initialization
-        self.edge_scorer = EdgeScorer(input_size=(4 * self.hidden_dim),
-                                      hidden_size=mlp_hid_dim)
+        self.edge_scorer = MLP(input_size=(4 * self.hidden_dim),
+                               hidden_size=mlp_hid_dim)
+
+        # labels MLP initialization
+        if self.labels_flag:
+            self.labels_mlp = MLP(input_size=(4 * self.hidden_dim),
+                                  hidden_size=lbl_mlp_hid_dim,
+                                  n_labels = n_labels,
+                                  for_labels=True)
 
         # Chu-Liu-Edmonds decoder
         self.decoder = decode_mst
 
         # Define loss function
         if loss_f == 'NLL':
-            self.loss = nll_loss
+            if self.labels_flag:
+                self.loss = nll_loss_edg_lbl
+            else:
+                self.loss = nll_loss
         else:
             self.loss = loss_aug_inf
 
     def forward(self, sentence, word_dropout=False):
 
         # Decompose the input
-        word_indx_tensor, pos_indx_tensor, true_tree_heads = sentence
+        if self.labels_flag:
+            word_indx_tensor, pos_indx_tensor, true_tree_heads, true_edges_labels = sentence
+        else:
+            word_indx_tensor, pos_indx_tensor, true_tree_heads = sentence
         n_words = word_indx_tensor.shape[1]
 
         # Word dropout
@@ -63,6 +77,7 @@ class DependencyParser(nn.Module):
         # Word & POS embedding
         word_emb_tensor = self.word_embedding(word_indx_tensor)
         pos_emb_tensor = self.pos_embedding(pos_indx_tensor)
+
         # Embeddings concatenation
         if self.ex_emb_flag:  # todo: test
             ex_word_em_tensor = self.ex_word_embedding(word_indx_tensor)
@@ -73,20 +88,29 @@ class DependencyParser(nn.Module):
         hidden_vectors, _ = self.encoder(input_vectors)
 
         # Create 'edge vectors' by concatenating couples of hidden vectors
-        edges_list = []
-        edges_map = {}
-        running_indx = 0
+        edges_list, gt_edges_list = [], []
+        edges_map, gt_edges_map = {}, {}
+        running_indx, gt_running_indx = 0, 0
         for h, m in permutations(range(n_words), 2):
             if h == m or m == 0:  # the ROOT can't have a modifier
                 continue
             else:
-                edges_list.append(torch.cat((hidden_vectors[0, h, :], hidden_vectors[0, m, :])))
+                edge_embedding = torch.cat((hidden_vectors[0, h, :], hidden_vectors[0, m, :]))
+                edges_list.append(edge_embedding)
                 edges_map[(h, m)] = running_indx
                 running_indx += 1
 
+                if true_tree_heads[m] == h:
+                    gt_edges_list.append(edge_embedding)
+                    gt_edges_map[(h, m)] = gt_running_indx
+                    gt_running_indx += 1
+
         # Stack the edges vectors and activate the scorer
         edges_tensor = torch.stack(edges_list)
+        gt_edges_tensor = torch.stack(gt_edges_list)
         scores_tensor = self.edge_scorer(edges_tensor)
+        if self.labels_flag:
+            l_softmax_tensor = self.labels_mlp(gt_edges_tensor)
 
         # Represent the scores as a 2-dimensional numpy array
         scores_np_matrix = np.zeros((n_words, n_words))
@@ -95,8 +119,12 @@ class DependencyParser(nn.Module):
 
         # Prediction & loss calculation
         predicted_tree = decode_mst(scores_np_matrix, n_words, has_labels=False)
-        loss = self.loss(true_tree_heads, scores_tensor, edges_map)
 
+        if self.labels_flag:
+            loss = self.loss(true_tree_heads, scores_tensor, edges_map,
+                             true_edges_labels, l_softmax_tensor, gt_edges_map)
+        else:
+            loss = self.loss(true_tree_heads, scores_tensor, edges_map)
         return loss, predicted_tree[0]
 
 
@@ -110,7 +138,25 @@ def nll_loss(true_tree, scores_tensor, edges_map):
             if j != true_m:
                 denominator += scores_tensor[edges_map[(j, true_m)]]
         loss += torch.log(scores_tensor[edges_map[(true_h, true_m)]] / denominator)
-    return -(1/n_edges) * loss
+    return -(1 / n_edges) * loss
+
+
+def nll_loss_edg_lbl(true_tree, scores_tensor, edges_map, true_labels, softmax_tensor, gt_edges_map):
+    scores_tensor = torch.exp(scores_tensor)
+    n_edges = true_tree.shape[0] - 1
+    structure_loss = 0
+    labeling_loss = 0
+    labels_indx = 0
+    for true_m, true_h in enumerate(true_tree[1:], 1):
+        labeling_loss += torch.log(softmax_tensor[gt_edges_map[(true_h, true_m)]][true_labels[labels_indx]])
+        labels_indx += 1
+        denominator = 0
+        for j in range(n_edges):
+            if j != true_m:
+                denominator += scores_tensor[edges_map[(j, true_m)]]
+        structure_loss += torch.log(scores_tensor[edges_map[(true_h, true_m)]] / denominator)
+    loss = structure_loss + labeling_loss
+    return -(1 / n_edges) * loss
 
 
 def loss_aug_inf(true_tree, scores_tensor, edges_map):
@@ -150,18 +196,31 @@ def loss_aug_inf(true_tree, scores_tensor, edges_map):
     return loss  # todo: maybe we should multiply the loss by -1
 
 
-class EdgeScorer(nn.Module):
-    def __init__(self, input_size, hidden_size):
-        super(EdgeScorer, self).__init__()
+class MLP(nn.Module):
+    def __init__(self, input_size, hidden_size, n_labels=None, for_labels=False):
+        super(MLP, self).__init__()
+
+        # define MLP for labels flag
+        self.labels_flag = for_labels
+
+        # initialize MLP layers
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.activation = torch.tanh
-        self.fc2 = nn.Linear(hidden_size, 1)
+        if self.labels_flag and n_labels:
+            self.fc2 = nn.Linear(hidden_size, n_labels)
+            self.softmax = nn.Softmax(dim=-1)
+        else:
+            self.fc2 = nn.Linear(hidden_size, 1)
 
     def forward(self, edges):
         x = self.fc1(edges)
         x = self.activation(x)
-        edges_scores = self.fc2(x)
-        return edges_scores
+        output = self.fc2(x)
+
+        if self.labels_flag:
+            output = self.softmax(output)
+
+        return output
 
 
 if __name__ == '__main__':
@@ -171,22 +230,29 @@ if __name__ == '__main__':
     pos_embedding_dim = 25
     bilstm_n_layers = 2
     mlp_hidden_dim = 100
+    lbl_mlp_hid_dim = 100
     n_nodes = 5
 
     parser = DependencyParser(word_vocab_size,
                               word_embedding_dim,
+                              None,
+                              None,
                               pos_vocab_size,
                               pos_embedding_dim,
                               bilstm_n_layers,
-                              mlp_hidden_dim)
+                              mlp_hidden_dim,
+                              lbl_mlp_hid_dim,
+                              n_labels=10,
+                              with_labels=True)
 
     word_idx_tensor = torch.randint(0, word_vocab_size, (n_nodes,))
     word_idx_tensor = word_idx_tensor.unsqueeze(0)
     pos_idx_tensor = torch.randint(0, pos_vocab_size, (n_nodes,))
     pos_idx_tensor = pos_idx_tensor.unsqueeze(0)
     true_tree_heads = np.array([-1, 2, 0, 2, 0])
+    true_labels = np.array([3, 6, 0, 4])
 
-    sentence = (word_idx_tensor, pos_idx_tensor, true_tree_heads)
+    sentence = (word_idx_tensor, pos_idx_tensor, true_tree_heads, true_labels)
 
     loss, predicted_tree = parser(sentence)
 
