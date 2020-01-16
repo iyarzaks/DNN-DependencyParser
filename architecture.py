@@ -10,6 +10,8 @@ class DependencyParser(nn.Module):
                  mlp_hid_dim, lbl_mlp_hid_dim, n_labels, loss_f='NLL', ex_w_emb=None, with_labels=False):
         super(DependencyParser, self).__init__()
 
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         self.w_indx_counter = w_indx_counter
         self.w2i = w2i
         self.ex_emb_flag = False
@@ -23,7 +25,7 @@ class DependencyParser(nn.Module):
         # Embedding layers initialization
         self.word_embedding = nn.Embedding(w_vocab_size, w_emb_dim)
         self.pos_embedding = nn.Embedding(pos_vocab_size, pos_emb_dim)
-        if ex_w_emb:  # Use external word embeddings
+        if ex_w_emb is not None:  # Use external word embeddings
             self.ex_emb_flag = True
             self.ex_word_embedding = nn.Embedding.from_pretrained(ex_w_emb, freeze=False)
 
@@ -75,9 +77,8 @@ class DependencyParser(nn.Module):
                     word_idx_tensor[cell_indx] = self.w2i['<unk>']
 
         # Word & POS embedding
-        word_emb_tensor = self.word_embedding(word_indx_tensor)
-        pos_emb_tensor = self.pos_embedding(pos_indx_tensor)
-
+        word_emb_tensor = self.word_embedding(word_indx_tensor.to(self.device))
+        pos_emb_tensor = self.pos_embedding(pos_indx_tensor.to(self.device))
         # Embeddings concatenation
         if self.ex_emb_flag:  # todo: test
             ex_word_em_tensor = self.ex_word_embedding(word_indx_tensor)
@@ -193,7 +194,7 @@ def loss_aug_inf(true_tree, scores_tensor, edges_map):
     # Loss calculation
     loss = torch.max(torch.tensor([0, 1 + torch.sum(true_scores) - torch.sum(pred_scores)], requires_grad=True))
 
-    return loss  # todo: maybe we should multiply the loss by -1
+    return -1*loss  # todo: maybe we should multiply the loss by -1
 
 
 class MLP(nn.Module):
