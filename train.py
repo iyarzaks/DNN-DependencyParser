@@ -56,7 +56,6 @@ def train(model, optimizer, train_dataloader, test_dataloader, accumulate_grad_s
             loss = loss / accumulate_grad_steps
             loss.backward()
             if i % accumulate_grad_steps == 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # gradient norm scaling
                 optimizer.step()
                 model.zero_grad()
                 runtime = datetime.timedelta(seconds=time.time()-tmp_point_time)

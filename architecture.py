@@ -17,17 +17,21 @@ class DependencyParser(nn.Module):
         self.ex_emb_flag = False
         self.labels_flag = with_labels
 
-        # LSTM dimensions
-        self.n_lstm_layers = n_lstm_layers
-        self.input_dim = w_emb_dim + pos_emb_dim
-        self.hidden_dim = self.input_dim
-
         # Embedding layers initialization
         self.word_embedding = nn.Embedding(w_vocab_size, w_emb_dim)
         self.pos_embedding = nn.Embedding(pos_vocab_size, pos_emb_dim)
         if ex_w_emb is not None:  # Use external word embeddings
             self.ex_emb_flag = True
             self.ex_word_embedding = nn.Embedding.from_pretrained(ex_w_emb, freeze=False)
+
+        # LSTM dimensions
+        self.n_lstm_layers = n_lstm_layers
+        if self.ex_emb_flag:
+            self.ex_emb_dim = self.ex_w_emb.size(-1)
+            self.input_dim = w_emb_dim + self.ex_emb_dim + pos_emb_dim
+        else:
+            self.input_dim = w_emb_dim + pos_emb_dim
+        self.hidden_dim = self.input_dim
 
         # Bidirectional LSTM model initialization
         self.encoder = nn.LSTM(input_size=self.input_dim,
@@ -206,7 +210,7 @@ class MLP(nn.Module):
 
         # initialize MLP layers
         self.fc1 = nn.Linear(input_size, hidden_size)
-        self.activation = torch.tanh
+        self.activation = torch.relu
         if self.labels_flag and n_labels:
             self.fc2 = nn.Linear(hidden_size, n_labels)
             self.softmax = nn.Softmax(dim=-1)
