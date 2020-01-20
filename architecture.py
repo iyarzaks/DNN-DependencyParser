@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from chu_liu_edmonds import decode_mst
-from itertools import permutations
+from itertools import permutations, product
 
 
 class DependencyParser(nn.Module):
@@ -48,7 +48,7 @@ class DependencyParser(nn.Module):
         if self.labels_flag:
             self.labels_mlp = MLP(input_size=(4 * self.hidden_dim),
                                   hidden_size=lbl_mlp_hid_dim,
-                                  n_labels = n_labels,
+                                  n_labels=n_labels,
                                   for_labels=True)
 
         # Chu-Liu-Edmonds decoder
@@ -93,29 +93,28 @@ class DependencyParser(nn.Module):
         hidden_vectors, _ = self.encoder(input_vectors)
 
         # Create 'edge vectors' by concatenating couples of hidden vectors
-        edges_list, gt_edges_list = [], []
-        edges_map, gt_edges_map = {}, {}
-        running_indx, gt_running_indx = 0, 0
-        for h, m in permutations(range(n_words), 2):
-            if h == m or m == 0:  # the ROOT can't have a modifier
-                continue
-            else:
-                edge_embedding = torch.cat((hidden_vectors[0, h, :], hidden_vectors[0, m, :]))
-                edges_list.append(edge_embedding)
-                edges_map[(h, m)] = running_indx
-                running_indx += 1
+        edges_map, true_edges_map = {}, {}
+        true_indx = 0
+        valid_edges = [(h, m) for m in range(1, n_words) for h in range(0, n_words) if h != m]
+        heads, mods, true_edges_indx = [], [], []
 
-                if true_tree_heads[m] == h:
-                    gt_edges_list.append(edge_embedding)
-                    gt_edges_map[(h, m)] = gt_running_indx
-                    gt_running_indx += 1
+        for indx, (h, m) in enumerate(valid_edges):
+            heads.append(h)
+            mods.append(m)
+            edges_map[(h, m)] = indx
 
-        # Stack the edges vectors and activate the scorer
-        edges_tensor = torch.stack(edges_list)
-        gt_edges_tensor = torch.stack(gt_edges_list)
+            if true_tree_heads[m] == h:
+                true_edges_indx.append(indx)
+                true_edges_map[(h, m)] = true_indx
+                true_indx += 1
+
+        edges_tensor = torch.cat((hidden_vectors[0, heads, :], hidden_vectors[0, mods, :]), dim=-1)
+        true_edges_tensor = edges_tensor[true_edges_indx, :]
+
+        # Activate the scorer
         scores_tensor = self.edge_scorer(edges_tensor)
         if self.labels_flag:
-            l_softmax_tensor = self.labels_mlp(gt_edges_tensor)
+            l_softmax_tensor = self.labels_mlp(true_edges_tensor)
 
         # Represent the scores as a 2-dimensional numpy array
         scores_np_matrix = np.zeros((n_words, n_words))
@@ -127,7 +126,7 @@ class DependencyParser(nn.Module):
 
         if self.labels_flag:
             loss = self.loss(true_tree_heads, scores_tensor, edges_map,
-                             true_edges_labels, l_softmax_tensor, gt_edges_map)
+                             true_edges_labels, l_softmax_tensor, true_edges_map)
         else:
             loss = self.loss(true_tree_heads, scores_tensor, edges_map)
         return loss, predicted_tree[0]
@@ -136,13 +135,13 @@ class DependencyParser(nn.Module):
 def nll_loss(true_tree, scores_tensor, edges_map):
     scores_tensor = torch.exp(scores_tensor)
     n_edges = true_tree.shape[0] - 1
+
     loss = 0
     for true_m, true_h in enumerate(true_tree[1:], 1):
-        denominator = 0
-        for j in range(n_edges):
-            if j != true_m:
-                denominator += scores_tensor[edges_map[(j, true_m)]]
-        loss += torch.log(scores_tensor[edges_map[(true_h, true_m)]] / denominator)
+        start_indx = (true_m - 1) * n_edges
+        loss += torch.log(scores_tensor[edges_map[(true_h, true_m)]]) \
+                - torch.log(torch.sum(scores_tensor[start_indx: start_indx + n_edges]))
+
     return -(1 / n_edges) * loss
 
 
@@ -198,7 +197,7 @@ def loss_aug_inf(true_tree, scores_tensor, edges_map):
     # Loss calculation
     loss = torch.max(torch.tensor([0, 1 + torch.sum(true_scores) - torch.sum(pred_scores)], requires_grad=True))
 
-    return -1*loss  # todo: maybe we should multiply the loss by -1
+    return -1 * loss  # todo: maybe we should multiply the loss by -1
 
 
 class MLP(nn.Module):
@@ -248,7 +247,7 @@ if __name__ == '__main__':
                               mlp_hidden_dim,
                               lbl_mlp_hid_dim,
                               n_labels=10,
-                              with_labels=True)
+                              with_labels=False)
 
     word_idx_tensor = torch.randint(0, word_vocab_size, (n_nodes,))
     word_idx_tensor = word_idx_tensor.unsqueeze(0)
@@ -257,8 +256,8 @@ if __name__ == '__main__':
     true_tree_heads = np.array([-1, 2, 0, 2, 0])
     true_labels = np.array([3, 6, 0, 4])
 
-    sentence = (word_idx_tensor, pos_idx_tensor, true_tree_heads, true_labels)
-
+    # sentence = (word_idx_tensor, pos_idx_tensor, true_tree_heads, true_labels)
+    sentence = (word_idx_tensor, pos_idx_tensor, true_tree_heads)
     loss, predicted_tree = parser(sentence)
 
     print('predicted tree: ', predicted_tree)
