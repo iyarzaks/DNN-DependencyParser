@@ -12,6 +12,8 @@ class PreProcessUtils:
         word_idx = 0
         pos_dict = {}
         pos_idx = 0
+        label_dict = {}
+        label_idx = 0
         for word in SPECIAL_TOKENS:
             word_dict[word] = word_idx
             word_idx += 1
@@ -24,10 +26,14 @@ class PreProcessUtils:
                     if len(splited_words) > 1:
                         word = splited_words[1]
                         pos = splited_words[2]
+                        label = splited_words[4]
                         if word not in word_dict:
                             word_dict[word] = word_idx
                             word_idx += 1
                         if pos not in pos_dict:
                             pos_dict[pos] = pos_idx
                             pos_idx += 1
-        return word_dict, pos_dict
+                        if label not in label_dict:
+                            label_dict[label] = label_idx
+                            label_idx += 1
+        return word_dict, pos_dict, label_dict

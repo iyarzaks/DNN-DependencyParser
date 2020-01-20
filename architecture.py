@@ -7,7 +7,7 @@ from itertools import permutations, product
 
 class DependencyParser(nn.Module):
     def __init__(self, w_vocab_size, w_emb_dim, w_indx_counter, w2i, pos_vocab_size, pos_emb_dim, n_lstm_layers,
-                 mlp_hid_dim, lbl_mlp_hid_dim, n_labels, loss_f='NLL', ex_w_emb=None, with_labels=False):
+                 mlp_hid_dim, lbl_mlp_hid_dim=1, n_labels=1, loss_f='NLL', ex_w_emb=None, with_labels=False):
         super(DependencyParser, self).__init__()
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -16,7 +16,7 @@ class DependencyParser(nn.Module):
         self.w2i = w2i
         self.ex_emb_flag = False
         self.labels_flag = with_labels
-
+        self.ex_w_emb = ex_w_emb
         # Embedding layers initialization
         self.word_embedding = nn.Embedding(w_vocab_size, w_emb_dim)
         self.pos_embedding = nn.Embedding(pos_vocab_size, pos_emb_dim)
@@ -78,7 +78,7 @@ class DependencyParser(nn.Module):
                 unk_prob = 0.25 / (self.w_indx_counter[word_indx] + 0.25)
                 bernoulli_rv = np.random.binomial(1, unk_prob, 1)
                 if bernoulli_rv:
-                    word_idx_tensor[cell_indx] = self.w2i['<unk>']
+                    word_indx_tensor[cell_indx] = self.w2i['<unk>']
 
         # Word & POS embedding
         word_emb_tensor = self.word_embedding(word_indx_tensor.to(self.device))
@@ -209,7 +209,7 @@ class MLP(nn.Module):
 
         # initialize MLP layers
         self.fc1 = nn.Linear(input_size, hidden_size)
-        self.activation = torch.relu
+        self.activation = torch.tanh
         if self.labels_flag and n_labels:
             self.fc2 = nn.Linear(hidden_size, n_labels)
             self.softmax = nn.Softmax(dim=-1)
