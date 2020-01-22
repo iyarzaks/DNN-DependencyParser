@@ -148,17 +148,18 @@ def nll_loss(true_tree, scores_tensor, edges_map):
 def nll_loss_edg_lbl(true_tree, scores_tensor, edges_map, true_labels, softmax_tensor, gt_edges_map):
     scores_tensor = torch.exp(scores_tensor)
     n_edges = true_tree.shape[0] - 1
+
     structure_loss = 0
     labeling_loss = 0
     labels_indx = 0
     for true_m, true_h in enumerate(true_tree[1:], 1):
         labeling_loss += torch.log(softmax_tensor[gt_edges_map[(true_h, true_m)]][true_labels[labels_indx]])
         labels_indx += 1
-        denominator = 0
-        for j in range(n_edges):
-            if j != true_m:
-                denominator += scores_tensor[edges_map[(j, true_m)]]
-        structure_loss += torch.log(scores_tensor[edges_map[(true_h, true_m)]] / denominator)
+
+        start_indx = (true_m - 1) * n_edges
+        structure_loss += torch.log(scores_tensor[edges_map[(true_h, true_m)]]) \
+                          - torch.log(torch.sum(scores_tensor[start_indx: start_indx + n_edges]))
+
     loss = structure_loss + labeling_loss
     return -(1 / n_edges) * loss
 
@@ -247,7 +248,7 @@ if __name__ == '__main__':
                               mlp_hidden_dim,
                               lbl_mlp_hid_dim,
                               n_labels=10,
-                              with_labels=False)
+                              with_labels=True)
 
     word_idx_tensor = torch.randint(0, word_vocab_size, (n_nodes,))
     word_idx_tensor = word_idx_tensor.unsqueeze(0)
@@ -256,8 +257,8 @@ if __name__ == '__main__':
     true_tree_heads = np.array([-1, 2, 0, 2, 0])
     true_labels = np.array([3, 6, 0, 4])
 
-    # sentence = (word_idx_tensor, pos_idx_tensor, true_tree_heads, true_labels)
-    sentence = (word_idx_tensor, pos_idx_tensor, true_tree_heads)
+    sentence = (word_idx_tensor, pos_idx_tensor, true_tree_heads, true_labels)
+    # sentence = (word_idx_tensor, pos_idx_tensor, true_tree_heads)
     loss, predicted_tree = parser(sentence)
 
     print('predicted tree: ', predicted_tree)
