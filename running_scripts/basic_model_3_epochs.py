@@ -1,7 +1,7 @@
 import train_utils
 
 def main():
-    epochs = 3
+    epochs = 10
     conf_dic = {"WORD_EMBEDDINGS": None,
                 "WORD_EMBEDDING_DIM": 100,
                 "POS_EMBEDDING_DIM": 25,
@@ -11,9 +11,9 @@ def main():
                 "LEARNING_RATE": 0.01,
                 "ACCUMULATE_GRAD_STEPS": 50,
                 "LABELS_FLAG": False,
-                "WORD_DROP": False
+                "WORD_DROP": True
                 }
-    train_utils.run_test(configuration_dict=conf_dic, unique_id="basic_model_3_epochs", save_model=True, epochs=epochs)
+    train_utils.run_test(configuration_dict=conf_dic, unique_id="basic_model_4_epochs_new_arc_with_drop", save_model=True, epochs=epochs)
 
 if __name__ == '__main__':
     main()

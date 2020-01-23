@@ -90,7 +90,7 @@ def train(model, optimizer, train_dataloader, test_dataloader, accumulate_grad_s
             loss += loss.item()
             cur_acc = predicted_tree[1:] == edges[1:]
             acc += np.sum(cur_acc)
-            sentence_avarage_acc += (np.sum(cur_acc) / len(edges))
+            sentence_avarage_acc += (np.sum(cur_acc) / (len(edges)-1))
         loss = loss / len(train_dataloader.dataset)
         acc = acc / np.sum(train_dataloader.dataset.sentence_lens)
         loss_list.append(float(loss))
@@ -161,7 +161,7 @@ def run_test(configuration_dict, unique_id, save_model = False , epochs=1):
 
 def grid_search():
     best_result = 0
-    word_embedings = ["fasttext.en.300d","glove.6B.100d","charngram.100d"]
+    word_embedings = [None]
     word_embed_dims = [100]
     pos_embed_dims = [25]
     hid_mlp_dims = [100]
