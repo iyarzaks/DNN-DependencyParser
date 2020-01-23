@@ -7,7 +7,7 @@ from itertools import permutations, product
 
 class DependencyParser(nn.Module):
     def __init__(self, w_vocab_size, w_emb_dim, w_indx_counter, w2i, pos_vocab_size, pos_emb_dim, n_lstm_layers,
-                 mlp_hid_dim, lbl_mlp_hid_dim=1, n_labels=1, loss_f='NLL', ex_w_emb=None, with_labels=False,
+                 mlp_hid_dim, lstm_hid_dim, lbl_mlp_hid_dim=1, n_labels=1, loss_f='NLL', ex_w_emb=None, with_labels=False,
                  lstm_drop_prob=0, mlp_drop_prob=0):
         super(DependencyParser, self).__init__()
 
@@ -32,7 +32,7 @@ class DependencyParser(nn.Module):
             self.input_dim = w_emb_dim + self.ex_emb_dim + pos_emb_dim
         else:
             self.input_dim = w_emb_dim + pos_emb_dim
-        self.hidden_dim = self.input_dim
+        self.hidden_dim = lstm_hid_dim
 
         # Bidirectional LSTM model initialization
         self.encoder = nn.LSTM(input_size=self.input_dim,
