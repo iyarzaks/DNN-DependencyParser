@@ -90,7 +90,7 @@ class DependencyParser(nn.Module):
 
         heads_tensor = self.mlp_head(hidden_vectors)
         dep_tensor = self.mlp_dep(hidden_vectors)
-        pad_dep_tensor = torch.cat((dep_tensor, torch.ones(dep_tensor.shape[0]).unsqueeze(1)), dim=1)
+        pad_dep_tensor = torch.cat((dep_tensor, torch.ones(dep_tensor.shape[0]).to(self.device).unsqueeze(1)), dim=1)
 
         scores = torch.matmul(torch.matmul(pad_dep_tensor, self.weights), heads_tensor.T).T
 
