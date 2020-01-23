@@ -7,7 +7,8 @@ from itertools import permutations, product
 
 class DependencyParser(nn.Module):
     def __init__(self, w_vocab_size, w_emb_dim, w_indx_counter, w2i, pos_vocab_size, pos_emb_dim, n_lstm_layers,
-                 mlp_hid_dim, lbl_mlp_hid_dim=1, n_labels=1, loss_f='NLL', ex_w_emb=None, with_labels=False):
+                 mlp_hid_dim, lbl_mlp_hid_dim=1, n_labels=1, loss_f='NLL', ex_w_emb=None, with_labels=False,
+                 lstm_drop_prob=0, mlp_drop_prob=0):
         super(DependencyParser, self).__init__()
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -38,18 +39,21 @@ class DependencyParser(nn.Module):
                                hidden_size=self.hidden_dim,
                                num_layers=self.n_lstm_layers,
                                bidirectional=True,
-                               batch_first=True)
+                               batch_first=True,
+                               dropout=lstm_drop_prob)
 
         # Edge scorer initialization
         self.edge_scorer = MLP(input_size=(4 * self.hidden_dim),
-                               hidden_size=mlp_hid_dim)
+                               hidden_size=mlp_hid_dim,
+                               dropout_prob=mlp_drop_prob)
 
         # labels MLP initialization
         if self.labels_flag:
             self.labels_mlp = MLP(input_size=(4 * self.hidden_dim),
                                   hidden_size=lbl_mlp_hid_dim,
                                   n_labels=n_labels,
-                                  for_labels=True)
+                                  for_labels=True,
+                                  dropout_prob=mlp_drop_prob)
 
         # Chu-Liu-Edmonds decoder
         self.decoder = decode_mst
@@ -73,7 +77,7 @@ class DependencyParser(nn.Module):
         n_words = word_indx_tensor.shape[1]
 
         # Word dropout
-        if word_dropout:  # todo: test
+        if word_dropout:
             for cell_indx, word_indx in enumerate(word_indx_tensor):
                 unk_prob = 0.25 / (self.w_indx_counter[word_indx] + 0.25)
                 bernoulli_rv = np.random.binomial(1, unk_prob, 1)
@@ -84,7 +88,7 @@ class DependencyParser(nn.Module):
         word_emb_tensor = self.word_embedding(word_indx_tensor.to(self.device))
         pos_emb_tensor = self.pos_embedding(pos_indx_tensor.to(self.device))
         # Embeddings concatenation
-        if self.ex_emb_flag:  # todo: test
+        if self.ex_emb_flag:
             ex_word_em_tensor = self.ex_word_embedding(word_indx_tensor)
             input_vectors = torch.cat((word_emb_tensor, ex_word_em_tensor, pos_emb_tensor), dim=-1)
         else:
@@ -202,7 +206,7 @@ def loss_aug_inf(true_tree, scores_tensor, edges_map):
 
 
 class MLP(nn.Module):
-    def __init__(self, input_size, hidden_size, n_labels=None, for_labels=False):
+    def __init__(self, input_size, hidden_size, n_labels=None, for_labels=False, dropout_prob=0):
         super(MLP, self).__init__()
 
         # define MLP for labels flag
@@ -210,6 +214,7 @@ class MLP(nn.Module):
 
         # initialize MLP layers
         self.fc1 = nn.Linear(input_size, hidden_size)
+        self.dropout = nn.Dropout(p=dropout_prob)
         self.activation = torch.tanh
         if self.labels_flag and n_labels:
             self.fc2 = nn.Linear(hidden_size, n_labels)
@@ -219,6 +224,7 @@ class MLP(nn.Module):
 
     def forward(self, edges):
         x = self.fc1(edges)
+        x = self.dropout(x)
         x = self.activation(x)
         output = self.fc2(x)
 
